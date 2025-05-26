@@ -1,0 +1,47 @@
+﻿@page "/uploadfile"
+@rendermode InteractiveServer
+@using FleetComponentTracker.Services
+@inject CsvImportService CsvImportService
+
+<PageTitle>Upload File</PageTitle>
+
+
+<h3>Upload CSV File</h3>
+
+<InputFile OnChange="HandleFileSelected" accept=".csv" />
+
+@*Check if any errors before displaying this section*@
+@if (Errors != null && Errors.Any())
+{
+    <h4 class="text-danger">Errors:</h4>
+    <ul>
+        @foreach (var error in Errors)
+        {
+            <li>@error</li>
+        }
+    </ul>
+}
+
+@if (SuccessCount > 0)
+{
+    <p class="text-success">@SuccessCount components imported successfully.</p>
+}
+
+@code {
+    private List<string> Errors = new();
+    private int SuccessCount = 0;
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        //Reset fields before handling file
+        Errors.Clear();
+        SuccessCount = 0;
+
+        var file = e.File;
+        if (file == null) return;
+
+        using var stream = file.OpenReadStream();
+        var (valid, errors) = await CsvImportService.ImportCsvAsync(stream);
+        SuccessCount = valid.Count;
+        Errors = errors;
+    }
+}

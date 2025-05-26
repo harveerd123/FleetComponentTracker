@@ -1,0 +1,290 @@
+﻿@page "/fleetdata"
+@rendermode InteractiveServer
+@inject HttpClient Http
+
+<PageTitle>Fleet Data</PageTitle>
+
+<h3>Fleet Components</h3>
+
+@*Check for any error messages, if so display this section*@
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger" role="alert">
+        @errorMessage
+    </div>
+}
+
+<div class="mb-3">
+    <label>Fleet Name:</label>
+    <select @bind="filterFleetName" class="form-select">
+        <option value="">-- All --</option>
+        @foreach (var fleet in distinctFleetNames)
+        {
+            <option value="@fleet">@fleet</option>
+        }
+    </select>
+</div>
+
+<div class="mb-3">
+    <label>Install Date From:</label>
+    <InputDate @bind-Value="filterDateFrom" class="form-control" />
+</div>
+
+<div class="mb-3">
+    <label>Install Date To:</label>
+    <InputDate @bind-Value="filterDateTo" class="form-control" />
+</div>
+
+<Button Color="Color.Primary" Clicked="@ApplyFilters">Apply Filters</Button>
+<Button Color="Color.Secondary" Clicked="@ClearFilters">Clear Filters</Button>
+
+@if (components == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    @*Used Blazorise library for DataGrid, enabled sorting of columns and pagination. Template code provided from doc website.*@
+    <DataGrid TItem="FleetComponentTracker.Models.Components"
+              Data="@components"
+              @bind-SelectedRow="selectedComponent"
+              Editable="true"
+              Responsive="true"
+              ShowPager="true"
+              PageSize="10"
+              Sortable="true"
+              EditMode="DataGridEditMode.Form"
+              CommandMode="DataGridCommandMode.ButtonRow"
+              RowInserted="OnRowInserted"
+              RowUpdated="OnRowUpdated"
+              RowRemoved="OnRowRemoved">
+
+        <DataGridColumns>
+            <DataGridCommandColumn NewCommandAllowed="true"
+                                   EditCommandAllowed="true"
+                                   DeleteCommandAllowed="true"
+                                   CancelCommandAllowed="true">
+                <SaveCommandTemplate>
+                    <Button Color="Color.Primary" Clicked="@context.Clicked">@context.LocalizationString</Button>
+                </SaveCommandTemplate>
+                <CancelCommandTemplate>
+                    <Button Color="Color.Secondary" Clicked="@context.Clicked">@context.LocalizationString</Button>
+                </CancelCommandTemplate>
+            </DataGridCommandColumn>
+
+            <DataGridColumn Field="@nameof(FleetComponentTracker.Models.Components.Id)"
+                            Caption="Id"
+                            Sortable="true"
+                            Editable="false" />
+
+            <DataGridColumn Field="@nameof(FleetComponentTracker.Models.Components.SerialNumber)"
+                            Caption="Serial Number"
+                            Sortable="true"
+                            Editable="true" />
+
+            <DataGridColumn Field="@nameof(FleetComponentTracker.Models.Components.Description)"
+                            Caption="Description"
+                            Sortable="true"
+                            Editable="true" />
+
+            <DataGridColumn Field="@nameof(FleetComponentTracker.Models.Components.VehicleNumber)"
+                            Caption="Vehicle Number"
+                            Sortable="true"
+                            Editable="true" />
+
+            <DataGridColumn Field="@nameof(FleetComponentTracker.Models.Components.FleetName)"
+                            Caption="Fleet Name"
+                            Sortable="true"
+                            Editable="false">
+                <DisplayTemplate>
+                    @context.FleetName
+                </DisplayTemplate>
+            </DataGridColumn>
+
+            <DataGridColumn Field="@nameof(FleetComponentTracker.Models.Components.InstallDate)"
+                            Caption="Install Date"
+                            Sortable="true"
+                            Editable="true">
+                <DisplayTemplate>
+                    @context.InstallDate.ToString("yyyy-MM-dd")
+                </DisplayTemplate>
+            </DataGridColumn>
+        </DataGridColumns>
+
+        <ButtonRowTemplate>
+            <Button Color="Color.Success" Clicked="@context.NewCommand.Clicked">New</Button>
+            <Button Color="Color.Primary" Disabled="selectedComponent is null" Clicked="@context.EditCommand.Clicked">Edit</Button>
+            <Button Color="Color.Danger" Disabled="selectedComponent is null" Clicked="@context.DeleteCommand.Clicked">Delete</Button>
+            <Button Color="Color.Link" Clicked="@context.ClearFilterCommand.Clicked">Clear Filter</Button>
+        </ButtonRowTemplate>
+
+    </DataGrid>
+}
+
+@code {
+    private List<FleetComponentTracker.Models.Components>? allComponents;
+    private List<FleetComponentTracker.Models.Components>? components;
+    private List<string> distinctFleetNames = new();
+
+    private FleetComponentTracker.Models.Components? selectedComponent;
+    private string? errorMessage;
+
+    private string? filterFleetName;
+    private DateTime? filterDateFrom;
+    private DateTime? filterDateTo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadComponents();
+    }
+
+    //make a call to GetAllComponents from controller
+    private async Task LoadComponents()
+    {
+        try
+        {
+            allComponents = await Http.GetFromJsonAsync<List<FleetComponentTracker.Models.Components>>("api/vehicle");
+            components = allComponents;
+            ExtractDistinctFleetNames();
+
+            //Apply filters if required
+            ApplyFilters();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load components: {ex.Message}";
+        }
+    }
+
+    //Extract all the distinct fleet names for the filter
+    private void ExtractDistinctFleetNames()
+    {
+        if (allComponents != null)
+        {
+            distinctFleetNames = allComponents
+                .Select(c => c.FleetName)
+                .Where(fn => !string.IsNullOrEmpty(fn))
+                .Distinct()
+                .OrderBy(fn => fn)
+                .ToList();
+        }
+    }
+
+    //Method applies filters to the components
+    private void ApplyFilters()
+    {
+        if (allComponents == null)
+        {
+            components = null;
+            return;
+        }
+
+        IEnumerable<FleetComponentTracker.Models.Components> filtered = allComponents;
+
+        if (!string.IsNullOrEmpty(filterFleetName))
+        {
+            filtered = filtered.Where(c => c.FleetName == filterFleetName);
+        }
+
+        if (filterDateFrom.HasValue)
+        {
+            filtered = filtered.Where(c => c.InstallDate >= DateOnly.FromDateTime(filterDateFrom.Value));
+        }
+
+        if (filterDateTo.HasValue)
+        {
+            filtered = filtered.Where(c => c.InstallDate <= DateOnly.FromDateTime(filterDateTo.Value));
+        }
+
+        components = filtered.ToList();
+    }
+
+    //Clear filters when button clicked
+    private void ClearFilters()
+    {
+        filterFleetName = null;
+        filterDateFrom = null;
+        filterDateTo = null;
+        components = allComponents;
+    }
+
+    //Need extra content in parameters. SavedRowItem = comes from Grid, e.Item = Component Item & e.Changes = dictionary of changes
+    private async Task OnRowInserted(SavedRowItem<FleetComponentTracker.Models.Components, Dictionary<string, object>> e)
+    {
+        errorMessage = null;
+        var newComponent = e.Item;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/vehicle", newComponent);
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadComponents();
+            }
+            else
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Insert failed: {content}";
+                await LoadComponents();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+        }
+    }
+
+    //Need extra content in parameters. SavedRowItem = comes from Grid, e.Item = Component Item & e.Changes = dictionary of changes
+    private async Task OnRowUpdated(SavedRowItem<FleetComponentTracker.Models.Components, Dictionary<string, object>> e)
+    {
+        errorMessage = null;
+        var updatedComponent = e.Item;
+
+        try
+        {
+            var response = await Http.PutAsJsonAsync($"api/vehicle/{updatedComponent.Id}", updatedComponent);
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadComponents();
+            }
+            else
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Update failed: {content}";
+                await LoadComponents();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+        }
+    }
+
+    //Method call to controller to remove component
+    private async Task OnRowRemoved(FleetComponentTracker.Models.Components item)
+    {
+        errorMessage = null;
+
+        try
+        {
+            var response = await Http.DeleteAsync($"api/vehicle/{item.Id}");
+
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadComponents();
+            }
+            else
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Delete failed: {content}";
+                await LoadComponents();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unexpected error: {ex.Message}";
+        }
+    }
+}
