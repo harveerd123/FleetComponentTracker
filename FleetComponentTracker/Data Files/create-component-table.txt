@@ -1,0 +1,9 @@
+CREATE TABLE Components (
+    Id INT IDENTITY(1,1) PRIMARY KEY,
+    SerialNumber VARCHAR(50) NOT NULL,
+    Description VARCHAR(100) NOT NULL,
+    VehicleNumber VARCHAR(10) NOT NULL,
+    InstallDate DATE NOT NULL,
+    CONSTRAINT FK_Components_Vehicles FOREIGN KEY (VehicleNumber)
+        REFERENCES Vehicles(VehicleNumber)
+);

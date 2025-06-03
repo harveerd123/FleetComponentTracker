@@ -1,0 +1,6 @@
+CREATE TABLE Vehicles (
+    VehicleNumber VARCHAR(10) PRIMARY KEY,
+    FleetName VARCHAR(50) NOT NULL,
+    DateIntoService DATE NOT NULL,
+    DateEndsService DATE NOT NULL
+);
